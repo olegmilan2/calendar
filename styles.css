@@ -84,15 +84,17 @@ h1 {
 
 .day {
   background: var(--card);
+  background: var(--day-bg, var(--card));
   border: 1px solid var(--line);
+  border-color: var(--day-border, var(--line));
   border-radius: 10px;
-  min-height: 106px;
-  padding: 7px;
+  min-height: 90px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   text-align: left;
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.35s ease, background 0.35s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 button.day {
@@ -111,9 +113,18 @@ button.day:hover {
   border-style: dashed;
 }
 
-.day.overdue {
-  border-color: #df6a6a;
-  background: #fff1f1;
+.day.state-ok {
+  --day-bg: #daf3e2;
+  --day-border: #58b87a;
+}
+
+.day.state-late {
+  --day-bg: #ffd9d9;
+  --day-border: #d45a5a;
+}
+
+.day.state-dynamic {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
 }
 
 .day-top {
@@ -125,7 +136,7 @@ button.day:hover {
 
 .day-number {
   font-weight: 800;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .day-badge {
@@ -147,7 +158,7 @@ button.day:hover {
 }
 
 .day-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -155,27 +166,51 @@ button.day:hover {
 }
 
 .day-time {
-  font-size: 12px;
+  font-size: 11px;
   color: #3d4c6f;
 }
 
 .timer.compact {
   margin-top: auto;
-  border-radius: 8px;
-  font-size: 11px;
-  padding: 5px 6px;
-  background: #edf4ff;
-  color: #184083;
+  border-radius: 9px;
+  padding: 4px 6px;
+  background: linear-gradient(180deg, #eff5ff 0%, #e6f0ff 100%);
+  color: #1c3f7c;
+  border: 1px solid #c9dbff;
+  display: grid;
+  gap: 1px;
 }
 
 .timer.warn {
   background: #fff6e6;
   color: #8a5200;
+  border-color: #f0d28f;
 }
 
 .timer.started {
   background: #ffe3e3;
   color: #8f1e1e;
+  border-color: #e8a2a2;
+}
+
+.timer.timer-ok {
+  background: #e1f7e9;
+  color: #176f3f;
+  border-color: #97d1ac;
+}
+
+.timer-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+.timer-value {
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .editor-backdrop {
@@ -300,7 +335,7 @@ button.day:hover {
 
 @media (max-width: 980px) {
   .day {
-    min-height: 96px;
+    min-height: 84px;
   }
 }
 
@@ -315,6 +350,6 @@ button.day:hover {
   }
 
   .day {
-    min-height: 92px;
+    min-height: 80px;
   }
 }

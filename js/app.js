@@ -1,5 +1,5 @@
 import './firebase.js';
-import { state } from './state.js';
+import { initRealtimeSync, state } from './state.js';
 import { updateTimers } from './timer.js';
 import { renderMonth, renderTabs, renderWeekdays } from './render.js';
 
@@ -15,6 +15,7 @@ function repaint() {
 
 renderWeekdays(weekdaysEl);
 repaint();
+initRealtimeSync(repaint);
 
 setInterval(() => {
   updateTimers(gridEl, state.shifts);

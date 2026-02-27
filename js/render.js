@@ -1,5 +1,5 @@
 import { MONTHS, WEEKDAYS } from './constants.js';
-import { state, ensureShift, saveState } from './state.js';
+import { state, upsertShift } from './state.js';
 import { escapeHtml, makeId, pad } from './utils.js';
 import { updateTimer, updateTimers } from './timer.js';
 
@@ -82,10 +82,10 @@ function createDayCard(year, month, day) {
   const statusEl = card.querySelector('.status');
 
   const updateShift = () => {
-    ensureShift(id);
-    state.shifts[id].name = nameInput.value.trim();
-    state.shifts[id].time = timeInput.value;
-    saveState();
+    upsertShift(id, {
+      name: nameInput.value.trim(),
+      time: timeInput.value
+    });
     updateTimer(card, state.shifts);
   };
 
@@ -93,18 +93,18 @@ function createDayCard(year, month, day) {
   timeInput.addEventListener('input', updateShift);
 
   card.querySelector('.btn.ok').addEventListener('click', () => {
-    ensureShift(id);
-    state.shifts[id].status = 'ok';
-    state.shifts[id].statusAt = new Date().toISOString();
-    saveState();
+    upsertShift(id, {
+      status: 'ok',
+      statusAt: new Date().toISOString()
+    });
     renderStatus(statusEl, state.shifts[id]);
   });
 
   card.querySelector('.btn.late').addEventListener('click', () => {
-    ensureShift(id);
-    state.shifts[id].status = 'late';
-    state.shifts[id].statusAt = new Date().toISOString();
-    saveState();
+    upsertShift(id, {
+      status: 'late',
+      statusAt: new Date().toISOString()
+    });
     renderStatus(statusEl, state.shifts[id]);
   });
 

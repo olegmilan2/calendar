@@ -3,6 +3,7 @@ import {
   getAnalytics,
   isSupported
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js';
+import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDvAdWKecvVAui8htUl5SOxWEcAQ7YGLDk',
@@ -16,6 +17,7 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
+export const db = getDatabase(app);
 export let analytics = null;
 
 (async () => {

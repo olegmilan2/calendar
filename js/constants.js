@@ -6,4 +6,5 @@ export const MONTHS = [
 ];
 
 export const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-export const STATE_KEY = 'shift_calendar_state_v1';
+export const LOCAL_CACHE_KEY = 'shift_calendar_state_v1';
+export const DB_ROOT = 'shiftCalendar/v1/shifts';

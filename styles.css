@@ -140,27 +140,106 @@ input:focus {
   letter-spacing: 0.2px;
 }
 
-.time-input {
-  border: 1px solid #a9c6ff !important;
-  border-radius: 10px !important;
-  background: #fff;
-  color: #143060;
-  font-size: 14px !important;
-  font-weight: 700;
-  padding: 8px 10px !important;
-  box-shadow: 0 6px 12px rgba(44, 98, 193, 0.08);
+.time-picker {
+  position: relative;
 }
 
-.time-input:focus {
-  border-color: #3d78e4 !important;
+.time-trigger {
+  position: relative;
+  width: 100%;
+  border: 1px solid #a9c6ff;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+  color: #143060;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-align: left;
+  padding: 10px 38px 10px 12px;
+  cursor: pointer;
+  box-shadow: 0 6px 12px rgba(44, 98, 193, 0.08);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.time-trigger::after {
+  content: '▾';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #3d78e4;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.time-picker.open .time-trigger {
+  border-color: #3d78e4;
   box-shadow: 0 0 0 3px rgba(61, 120, 228, 0.2);
 }
 
-.time-input::-webkit-calendar-picker-indicator {
+.time-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: #ffffff;
+  border: 1px solid #d5e4ff;
+  border-radius: 12px;
+  box-shadow: 0 14px 30px rgba(19, 53, 119, 0.18);
+  padding: 8px;
+}
+
+.time-dropdown-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  color: #345188;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.time-clear {
+  border: 0;
+  background: #eff4ff;
+  color: #345188;
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
-  padding: 2px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #e8f0ff 0%, #d7e6ff 100%);
+}
+
+.time-options {
+  max-height: 220px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding-right: 2px;
+}
+
+.time-option {
+  border: 1px solid #d8e4ff;
+  background: #f9fbff;
+  color: #2c4678;
+  border-radius: 8px;
+  padding: 7px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.time-option:hover {
+  border-color: #96b7ff;
+  background: #eef4ff;
+}
+
+.time-option.active {
+  border-color: #3d78e4;
+  background: #3d78e4;
+  color: #ffffff;
 }
 
 .timer {

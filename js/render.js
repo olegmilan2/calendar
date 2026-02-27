@@ -3,6 +3,8 @@ import { state, upsertShift } from './state.js';
 import { escapeHtml, makeId, pad } from './utils.js';
 import { updateTimer, updateTimers } from './timer.js';
 
+let isTimePickerGlobalHandlersBound = false;
+
 export function renderWeekdays(weekdaysEl) {
   weekdaysEl.innerHTML = '';
   for (const name of WEEKDAYS) {
@@ -29,6 +31,8 @@ export function renderTabs(tabsEl, onMonthChange) {
 }
 
 export function renderMonth(monthTitleEl, gridEl) {
+  bindTimePickerGlobalHandlers();
+
   const year = new Date().getFullYear();
   const month = MONTHS[state.monthIndex];
   monthTitleEl.textContent = `${month.name} ${year}`;
@@ -67,7 +71,17 @@ function createDayCard(year, month, day) {
     </div>
     <div class="time-panel">
       <label>Время прихода</label>
-      <input type="time" class="time-input" value="${escapeHtml(data.time)}" />
+      <div class="time-picker">
+        <button type="button" class="time-trigger">${escapeHtml(data.time || 'Выбрать время')}</button>
+        <div class="time-dropdown" hidden>
+          <div class="time-dropdown-head">
+            <span>Выберите время</span>
+            <button type="button" class="time-clear">Очистить</button>
+          </div>
+          <div class="time-options"></div>
+        </div>
+        <input type="hidden" class="time-input" value="${escapeHtml(data.time)}" />
+      </div>
     </div>
     <div class="timer" data-timer></div>
     <div class="actions">
@@ -79,7 +93,22 @@ function createDayCard(year, month, day) {
 
   const nameInput = card.querySelector('.name-input');
   const timeInput = card.querySelector('.time-input');
+  const timePicker = card.querySelector('.time-picker');
+  const timeTrigger = card.querySelector('.time-trigger');
+  const timeDropdown = card.querySelector('.time-dropdown');
+  const timeOptions = card.querySelector('.time-options');
+  const timeClearBtn = card.querySelector('.time-clear');
   const statusEl = card.querySelector('.status');
+
+  const pickTime = (value) => {
+    timeInput.value = value;
+    timeTrigger.textContent = value || 'Выбрать время';
+    updateShift();
+    closeTimePicker(timePicker, timeDropdown);
+    renderTimeOptions(timeOptions, timeInput.value, pickTime);
+  };
+
+  renderTimeOptions(timeOptions, timeInput.value, pickTime);
 
   const updateShift = () => {
     upsertShift(id, {
@@ -90,7 +119,24 @@ function createDayCard(year, month, day) {
   };
 
   nameInput.addEventListener('input', updateShift);
-  timeInput.addEventListener('input', updateShift);
+
+  timeTrigger.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (timePicker.classList.contains('open')) {
+      closeTimePicker(timePicker, timeDropdown);
+    } else {
+      openTimePicker(timePicker, timeDropdown);
+    }
+  });
+
+  timeClearBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    timeInput.value = '';
+    timeTrigger.textContent = 'Выбрать время';
+    updateShift();
+    closeTimePicker(timePicker, timeDropdown);
+    renderTimeOptions(timeOptions, '', pickTime);
+  });
 
   card.querySelector('.btn.ok').addEventListener('click', () => {
     upsertShift(id, {
@@ -111,6 +157,58 @@ function createDayCard(year, month, day) {
   renderStatus(statusEl, data);
 
   return card;
+}
+
+function renderTimeOptions(container, selectedValue, onPick) {
+  container.innerHTML = '';
+
+  for (let h = 0; h < 24; h += 1) {
+    for (let m = 0; m < 60; m += 5) {
+      const value = `${pad(h)}:${pad(m)}`;
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = `time-option ${value === selectedValue ? 'active' : ''}`;
+      option.textContent = value;
+      option.addEventListener('click', (event) => {
+        event.stopPropagation();
+        onPick(value);
+      });
+      container.appendChild(option);
+    }
+  }
+}
+
+function bindTimePickerGlobalHandlers() {
+  if (isTimePickerGlobalHandlersBound) return;
+
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.time-picker')) {
+      closeAllTimePickers();
+    }
+  });
+
+  isTimePickerGlobalHandlersBound = true;
+}
+
+function openTimePicker(pickerEl, dropdownEl) {
+  closeAllTimePickers();
+  pickerEl.classList.add('open');
+  dropdownEl.hidden = false;
+}
+
+function closeTimePicker(pickerEl, dropdownEl) {
+  pickerEl.classList.remove('open');
+  dropdownEl.hidden = true;
+}
+
+function closeAllTimePickers() {
+  document.querySelectorAll('.time-picker.open').forEach((pickerEl) => {
+    pickerEl.classList.remove('open');
+    const dropdownEl = pickerEl.querySelector('.time-dropdown');
+    if (dropdownEl) {
+      dropdownEl.hidden = true;
+    }
+  });
 }
 
 function renderStatus(el, shift) {

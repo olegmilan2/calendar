@@ -136,7 +136,7 @@ button.day:hover {
 
 .day-number {
   font-weight: 800;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .day-badge {
@@ -158,7 +158,7 @@ button.day:hover {
 }
 
 .day-name {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -166,10 +166,10 @@ button.day:hover {
 }
 
 .day-avatar {
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
-  border-radius: 50%;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -198,7 +198,7 @@ button.day:hover {
 }
 
 .day-time {
-  font-size: 11px;
+  font-size: 10px;
   color: #3d4c6f;
 }
 
@@ -339,8 +339,8 @@ button.day:hover {
 }
 
 .editor-photo-preview {
-  width: 82px;
-  height: 82px;
+  width: 220px;
+  height: 220px;
   border-radius: 12px;
   border: 1px dashed #bfd4ff;
   background: #f5f9ff;
@@ -355,6 +355,12 @@ button.day:hover {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.editor-photo-preview canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .editor-photo-empty {
@@ -376,6 +382,19 @@ button.day:hover {
     linear-gradient(135deg, #4c72b6 50%, transparent 50%) calc(100% - 11px) calc(50% - 2px) / 7px 7px no-repeat,
     #fff;
   padding-right: 34px;
+}
+
+.editor-crop-controls {
+  border: 1px solid #d9e6ff;
+  border-radius: 10px;
+  background: #f7faff;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.editor-range {
+  width: 100%;
+  margin-bottom: 6px;
 }
 
 .editor-status-title {

@@ -145,6 +145,14 @@ function ensureEditor() {
         <input id="editorPhoto" class="editor-input editor-file" type="file" accept="image/*" />
         <button type="button" class="editor-remove-photo">Убрать фото</button>
       </div>
+      <div class="editor-crop-controls" data-crop-controls hidden>
+        <label class="editor-label" for="cropZoom">Масштаб</label>
+        <input id="cropZoom" class="editor-range" type="range" min="100" max="300" value="100" />
+        <label class="editor-label" for="cropX">Сдвиг X</label>
+        <input id="cropX" class="editor-range" type="range" min="0" max="100" value="50" />
+        <label class="editor-label" for="cropY">Сдвиг Y</label>
+        <input id="cropY" class="editor-range" type="range" min="0" max="100" value="50" />
+      </div>
       <div class="editor-photo-preview" data-photo-preview></div>
       <label class="editor-label" for="editorTime">Время прихода</label>
       <input id="editorTime" class="editor-input" type="time" />
@@ -168,6 +176,10 @@ function ensureEditor() {
   const nameInput = backdrop.querySelector('#editorName');
   const photoInput = backdrop.querySelector('#editorPhoto');
   const removePhotoBtn = backdrop.querySelector('.editor-remove-photo');
+  const cropControls = backdrop.querySelector('[data-crop-controls]');
+  const cropZoom = backdrop.querySelector('#cropZoom');
+  const cropX = backdrop.querySelector('#cropX');
+  const cropY = backdrop.querySelector('#cropY');
   const photoPreview = backdrop.querySelector('[data-photo-preview]');
   const timeInput = backdrop.querySelector('#editorTime');
   const saveBtn = backdrop.querySelector('.editor-save');
@@ -181,13 +193,18 @@ function ensureEditor() {
     nameInput,
     photoInput,
     removePhotoBtn,
+    cropControls,
+    cropZoom,
+    cropX,
+    cropY,
     photoPreview,
     timeInput,
     saveBtn,
     clearShiftBtn,
     statusButtons,
     selectedStatus: '',
-    selectedPhoto: ''
+    selectedPhoto: '',
+    cropImage: null
   };
 
   backdrop.addEventListener('click', (event) => {
@@ -211,14 +228,23 @@ function ensureEditor() {
     const file = photoInput.files && photoInput.files[0];
     if (!file) return;
     const photoDataUrl = await readFileAsDataUrl(file);
-    editor.selectedPhoto = photoDataUrl;
+    await setCropSource(photoDataUrl);
     renderEditorPhotoPreview();
     photoInput.value = '';
   });
 
   removePhotoBtn.addEventListener('click', () => {
     editor.selectedPhoto = '';
+    editor.cropImage = null;
+    editor.cropControls.hidden = true;
     renderEditorPhotoPreview();
+  });
+
+  [cropZoom, cropX, cropY].forEach((control) => {
+    control.addEventListener('input', () => {
+      if (!editor.cropImage) return;
+      renderEditorPhotoPreview();
+    });
   });
 
   saveBtn.addEventListener('click', () => {
@@ -269,7 +295,12 @@ function openEditor({ id, dateLabel }) {
   editor.dateEl.textContent = dateLabel;
   editor.nameInput.value = shift.name || '';
   editor.selectedPhoto = shift.photo || '';
+  editor.cropImage = null;
+  editor.cropControls.hidden = true;
   editor.photoInput.value = '';
+  editor.cropZoom.value = '100';
+  editor.cropX.value = '50';
+  editor.cropY.value = '50';
   editor.timeInput.value = shift.time || '';
   editor.selectedStatus = shift.status || '';
   renderStatusSelection();
@@ -293,6 +324,17 @@ function renderStatusSelection() {
 }
 
 function renderEditorPhotoPreview() {
+  if (editor.cropImage) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 220;
+    canvas.height = 220;
+    drawCropToCanvas(canvas, editor.cropImage);
+    editor.selectedPhoto = canvas.toDataURL('image/jpeg', 0.9);
+    editor.photoPreview.innerHTML = '';
+    editor.photoPreview.appendChild(canvas);
+    return;
+  }
+
   if (!editor.selectedPhoto) {
     editor.photoPreview.innerHTML = '<span class="editor-photo-empty">Фото не выбрано</span>';
     return;
@@ -326,5 +368,43 @@ function readFileAsDataUrl(file) {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
     reader.readAsDataURL(file);
+  });
+}
+
+async function setCropSource(dataUrl) {
+  const image = await loadImage(dataUrl);
+  editor.cropImage = image;
+  editor.cropControls.hidden = false;
+  editor.cropZoom.value = '100';
+  editor.cropX.value = '50';
+  editor.cropY.value = '50';
+}
+
+function drawCropToCanvas(canvas, image) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const zoom = Number(editor.cropZoom.value) / 100;
+  const xRatio = Number(editor.cropX.value) / 100;
+  const yRatio = Number(editor.cropY.value) / 100;
+
+  const srcW = image.naturalWidth / zoom;
+  const srcH = image.naturalHeight / zoom;
+  const side = Math.min(srcW, srcH);
+  const maxX = Math.max(0, image.naturalWidth - side);
+  const maxY = Math.max(0, image.naturalHeight - side);
+  const srcX = maxX * xRatio;
+  const srcY = maxY * yRatio;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(image, srcX, srcY, side, side, 0, 0, canvas.width, canvas.height);
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
   });
 }

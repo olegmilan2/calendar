@@ -1,9 +1,10 @@
 import { MONTHS, WEEKDAYS } from './constants.js';
 import { state, upsertShift } from './state.js';
-import { escapeHtml, makeId, pad } from './utils.js';
+import { makeId } from './utils.js';
 import { updateTimer, updateTimers } from './timer.js';
 
-let isTimePickerGlobalHandlersBound = false;
+let editor = null;
+let currentEditId = null;
 
 export function renderWeekdays(weekdaysEl) {
   weekdaysEl.innerHTML = '';
@@ -31,7 +32,7 @@ export function renderTabs(tabsEl, onMonthChange) {
 }
 
 export function renderMonth(monthTitleEl, gridEl) {
-  bindTimePickerGlobalHandlers();
+  ensureEditor();
 
   const year = new Date().getFullYear();
   const month = MONTHS[state.monthIndex];
@@ -49,184 +50,185 @@ export function renderMonth(monthTitleEl, gridEl) {
   }
 
   for (let day = 1; day <= lastDay; day += 1) {
-    gridEl.appendChild(createDayCard(year, month.key, day));
+    gridEl.appendChild(createDayCard(year, month, day));
   }
 
   updateTimers(gridEl, state.shifts);
 }
 
 function createDayCard(year, month, day) {
-  const id = makeId(year, month, day);
-  const data = state.shifts[id] || { name: '', time: '', status: '' };
+  const id = makeId(year, month.key, day);
+  const shift = state.shifts[id] || {};
 
-  const card = document.createElement('div');
+  const card = document.createElement('button');
+  card.type = 'button';
   card.className = 'day';
   card.dataset.id = id;
 
   card.innerHTML = `
-    <div class="day-number">${day}</div>
-    <div>
-      <label>Имя сменщика</label>
-      <input type="text" class="name-input" value="${escapeHtml(data.name)}" placeholder="Введите имя" />
+    <div class="day-top">
+      <span class="day-number">${day}</span>
+      <span class="day-badge" data-badge></span>
     </div>
-    <div class="time-panel">
-      <label>Время прихода</label>
-      <div class="time-picker">
-        <button type="button" class="time-trigger">${escapeHtml(data.time || 'Выбрать время')}</button>
-        <div class="time-dropdown" hidden>
-          <div class="time-dropdown-head">
-            <span>Выберите время</span>
-            <button type="button" class="time-clear">Очистить</button>
-          </div>
-          <div class="time-options"></div>
-        </div>
-        <input type="hidden" class="time-input" value="${escapeHtml(data.time)}" />
-      </div>
-    </div>
-    <div class="timer" data-timer></div>
-    <div class="actions">
-      <button class="btn ok" type="button">Пришел</button>
-      <button class="btn late" type="button">Опоздал</button>
-    </div>
-    <div class="status"></div>
+    <div class="day-name" data-name></div>
+    <div class="day-time" data-time></div>
+    <div class="timer compact" data-timer></div>
   `;
 
-  const nameInput = card.querySelector('.name-input');
-  const timeInput = card.querySelector('.time-input');
-  const timePicker = card.querySelector('.time-picker');
-  const timeTrigger = card.querySelector('.time-trigger');
-  const timeDropdown = card.querySelector('.time-dropdown');
-  const timeOptions = card.querySelector('.time-options');
-  const timeClearBtn = card.querySelector('.time-clear');
-  const statusEl = card.querySelector('.status');
+  updateDayCard(card, shift);
 
-  const pickTime = (value) => {
-    timeInput.value = value;
-    timeTrigger.textContent = value || 'Выбрать время';
-    updateShift();
-    closeTimePicker(timePicker, timeDropdown);
-    renderTimeOptions(timeOptions, timeInput.value, pickTime);
-  };
-
-  renderTimeOptions(timeOptions, timeInput.value, pickTime);
-
-  const updateShift = () => {
-    upsertShift(id, {
-      name: nameInput.value.trim(),
-      time: timeInput.value
+  card.addEventListener('click', () => {
+    openEditor({
+      id,
+      dateLabel: `${day} ${month.name} ${year}`
     });
-    updateTimer(card, state.shifts);
-  };
-
-  nameInput.addEventListener('input', updateShift);
-
-  timeTrigger.addEventListener('click', (event) => {
-    event.stopPropagation();
-    if (timePicker.classList.contains('open')) {
-      closeTimePicker(timePicker, timeDropdown);
-    } else {
-      openTimePicker(timePicker, timeDropdown);
-    }
   });
-
-  timeClearBtn.addEventListener('click', (event) => {
-    event.stopPropagation();
-    timeInput.value = '';
-    timeTrigger.textContent = 'Выбрать время';
-    updateShift();
-    closeTimePicker(timePicker, timeDropdown);
-    renderTimeOptions(timeOptions, '', pickTime);
-  });
-
-  card.querySelector('.btn.ok').addEventListener('click', () => {
-    upsertShift(id, {
-      status: 'ok',
-      statusAt: new Date().toISOString()
-    });
-    renderStatus(statusEl, state.shifts[id]);
-  });
-
-  card.querySelector('.btn.late').addEventListener('click', () => {
-    upsertShift(id, {
-      status: 'late',
-      statusAt: new Date().toISOString()
-    });
-    renderStatus(statusEl, state.shifts[id]);
-  });
-
-  renderStatus(statusEl, data);
 
   return card;
 }
 
-function renderTimeOptions(container, selectedValue, onPick) {
-  container.innerHTML = '';
+function updateDayCard(card, shift) {
+  const nameEl = card.querySelector('[data-name]');
+  const timeEl = card.querySelector('[data-time]');
+  const badgeEl = card.querySelector('[data-badge]');
 
-  for (let h = 0; h < 24; h += 1) {
-    for (let m = 0; m < 60; m += 5) {
-      const value = `${pad(h)}:${pad(m)}`;
-      const option = document.createElement('button');
-      option.type = 'button';
-      option.className = `time-option ${value === selectedValue ? 'active' : ''}`;
-      option.textContent = value;
-      option.addEventListener('click', (event) => {
-        event.stopPropagation();
-        onPick(value);
-      });
-      container.appendChild(option);
-    }
-  }
-}
+  nameEl.textContent = shift.name || 'Не назначен';
+  timeEl.textContent = shift.time ? `Приход: ${shift.time}` : 'Время не задано';
 
-function bindTimePickerGlobalHandlers() {
-  if (isTimePickerGlobalHandlersBound) return;
-
-  document.addEventListener('click', (event) => {
-    if (!event.target.closest('.time-picker')) {
-      closeAllTimePickers();
-    }
-  });
-
-  isTimePickerGlobalHandlersBound = true;
-}
-
-function openTimePicker(pickerEl, dropdownEl) {
-  closeAllTimePickers();
-  pickerEl.classList.add('open');
-  dropdownEl.hidden = false;
-}
-
-function closeTimePicker(pickerEl, dropdownEl) {
-  pickerEl.classList.remove('open');
-  dropdownEl.hidden = true;
-}
-
-function closeAllTimePickers() {
-  document.querySelectorAll('.time-picker.open').forEach((pickerEl) => {
-    pickerEl.classList.remove('open');
-    const dropdownEl = pickerEl.querySelector('.time-dropdown');
-    if (dropdownEl) {
-      dropdownEl.hidden = true;
-    }
-  });
-}
-
-function renderStatus(el, shift) {
-  el.className = 'status';
-
-  if (!shift.status) {
-    el.textContent = '';
-    return;
-  }
-
-  const t = shift.statusAt ? new Date(shift.statusAt) : new Date();
-  const hm = `${pad(t.getHours())}:${pad(t.getMinutes())}`;
+  badgeEl.className = 'day-badge';
+  badgeEl.textContent = '';
 
   if (shift.status === 'ok') {
-    el.classList.add('ok');
-    el.textContent = `Пришел в ${hm}`;
-  } else {
-    el.classList.add('late');
-    el.textContent = `Опоздал (${hm})`;
+    badgeEl.textContent = 'Пришел';
+    badgeEl.classList.add('ok');
   }
+
+  if (shift.status === 'late') {
+    badgeEl.textContent = 'Опоздал';
+    badgeEl.classList.add('late');
+  }
+}
+
+function updateDayCardById(id) {
+  const card = document.querySelector(`.day[data-id="${id}"]`);
+  if (!card) return;
+
+  const shift = state.shifts[id] || {};
+  updateDayCard(card, shift);
+  updateTimer(card, state.shifts);
+}
+
+function ensureEditor() {
+  if (editor) return;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'editor-backdrop';
+  backdrop.innerHTML = `
+    <div class="editor-panel" role="dialog" aria-modal="true" aria-label="Редактирование смены">
+      <div class="editor-head">
+        <h2>Редактирование смены</h2>
+        <button type="button" class="editor-close" data-close>Закрыть</button>
+      </div>
+      <div class="editor-date" data-date></div>
+      <label class="editor-label" for="editorName">Имя сменщика</label>
+      <input id="editorName" class="editor-input" type="text" placeholder="Введите имя" />
+      <label class="editor-label" for="editorTime">Время прихода</label>
+      <input id="editorTime" class="editor-input" type="time" />
+      <div class="editor-status-title">Статус</div>
+      <div class="editor-status-row">
+        <button type="button" class="editor-status" data-status="">Без статуса</button>
+        <button type="button" class="editor-status" data-status="ok">Пришел</button>
+        <button type="button" class="editor-status" data-status="late">Опоздал</button>
+      </div>
+      <button type="button" class="editor-save">Сохранить</button>
+    </div>
+  `;
+
+  document.body.appendChild(backdrop);
+
+  const panel = backdrop.querySelector('.editor-panel');
+  const dateEl = backdrop.querySelector('[data-date]');
+  const nameInput = backdrop.querySelector('#editorName');
+  const timeInput = backdrop.querySelector('#editorTime');
+  const saveBtn = backdrop.querySelector('.editor-save');
+  const statusButtons = Array.from(backdrop.querySelectorAll('.editor-status'));
+
+  editor = {
+    backdrop,
+    panel,
+    dateEl,
+    nameInput,
+    timeInput,
+    saveBtn,
+    statusButtons,
+    selectedStatus: ''
+  };
+
+  backdrop.addEventListener('click', (event) => {
+    if (event.target === backdrop || event.target.hasAttribute('data-close')) {
+      closeEditor();
+    }
+  });
+
+  panel.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+
+  statusButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      editor.selectedStatus = btn.dataset.status || '';
+      renderStatusSelection();
+    });
+  });
+
+  saveBtn.addEventListener('click', () => {
+    if (!currentEditId) return;
+
+    const prev = state.shifts[currentEditId] || {};
+    const nextStatus = editor.selectedStatus;
+
+    upsertShift(currentEditId, {
+      name: editor.nameInput.value.trim(),
+      time: editor.timeInput.value,
+      status: nextStatus,
+      statusAt: nextStatus ? (prev.status === nextStatus ? prev.statusAt || new Date().toISOString() : new Date().toISOString()) : null
+    });
+
+    updateDayCardById(currentEditId);
+    closeEditor();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && editor.backdrop.classList.contains('open')) {
+      closeEditor();
+    }
+  });
+}
+
+function openEditor({ id, dateLabel }) {
+  ensureEditor();
+
+  const shift = state.shifts[id] || {};
+  currentEditId = id;
+  editor.dateEl.textContent = dateLabel;
+  editor.nameInput.value = shift.name || '';
+  editor.timeInput.value = shift.time || '';
+  editor.selectedStatus = shift.status || '';
+  renderStatusSelection();
+
+  editor.backdrop.classList.add('open');
+  editor.nameInput.focus();
+}
+
+function closeEditor() {
+  if (!editor) return;
+  editor.backdrop.classList.remove('open');
+  currentEditId = null;
+}
+
+function renderStatusSelection() {
+  editor.statusButtons.forEach((btn) => {
+    const isActive = (btn.dataset.status || '') === editor.selectedStatus;
+    btn.classList.toggle('active', isActive);
+  });
 }

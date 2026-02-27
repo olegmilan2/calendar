@@ -8,14 +8,17 @@ export function updateTimer(card, shifts) {
   if (card.classList.contains('empty')) return;
 
   const timerEl = card.querySelector('[data-timer]');
+  if (!timerEl) return;
+
   const id = card.dataset.id;
   const shift = shifts[id] || {};
   const shiftTime = shift.time;
 
-  timerEl.className = 'timer';
+  timerEl.className = 'timer compact';
+  card.classList.remove('overdue');
 
   if (!shiftTime) {
-    timerEl.textContent = 'Укажите время прихода';
+    timerEl.textContent = 'Нет времени';
     return;
   }
 
@@ -26,9 +29,12 @@ export function updateTimer(card, shifts) {
 
   if (diff > 0) {
     if (diff < 3600000) timerEl.classList.add('warn');
-    timerEl.textContent = `До смены: ${formatDuration(diff)}`;
+    timerEl.textContent = `До смены ${formatDuration(diff)}`;
   } else {
-    timerEl.classList.add('started');
-    timerEl.textContent = `Смена началась ${formatDuration(Math.abs(diff))} назад`;
+    timerEl.textContent = `Просрочка ${formatDuration(Math.abs(diff))}`;
+    if (shift.status !== 'ok') {
+      timerEl.classList.add('started');
+      card.classList.add('overdue');
+    }
   }
 }

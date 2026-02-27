@@ -65,7 +65,7 @@ function createDayCard(year, month, day) {
       <label>Имя сменщика</label>
       <input type="text" class="name-input" value="${escapeHtml(data.name)}" placeholder="Введите имя" />
     </div>
-    <div>
+    <div class="time-panel">
       <label>Время прихода</label>
       <input type="time" class="time-input" value="${escapeHtml(data.time)}" />
     </div>

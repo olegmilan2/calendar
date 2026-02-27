@@ -68,6 +68,7 @@ function createDayCard(year, month, day) {
   card.innerHTML = `
     <div class="day-top">
       <span class="day-number">${day}</span>
+      <span class="day-avatar" data-avatar></span>
       <span class="day-badge" data-badge></span>
     </div>
     <div class="day-name" data-name></div>
@@ -91,9 +92,12 @@ function updateDayCard(card, shift) {
   const nameEl = card.querySelector('[data-name]');
   const timeEl = card.querySelector('[data-time]');
   const badgeEl = card.querySelector('[data-badge]');
+  const avatarEl = card.querySelector('[data-avatar]');
+  const name = shift.name || 'Не назначен';
 
-  nameEl.textContent = shift.name || 'Не назначен';
+  nameEl.textContent = name;
   timeEl.textContent = shift.time ? `Приход: ${shift.time}` : 'Время не задано';
+  renderAvatar(avatarEl, shift.photo, name);
 
   badgeEl.className = 'day-badge';
   badgeEl.textContent = '';
@@ -132,6 +136,12 @@ function ensureEditor() {
       <div class="editor-date" data-date></div>
       <label class="editor-label" for="editorName">Имя сменщика</label>
       <input id="editorName" class="editor-input" type="text" placeholder="Введите имя" />
+      <label class="editor-label" for="editorPhoto">Фото сменщика</label>
+      <div class="editor-photo-row">
+        <input id="editorPhoto" class="editor-input editor-file" type="file" accept="image/*" />
+        <button type="button" class="editor-remove-photo">Убрать фото</button>
+      </div>
+      <div class="editor-photo-preview" data-photo-preview></div>
       <label class="editor-label" for="editorTime">Время прихода</label>
       <input id="editorTime" class="editor-input" type="time" />
       <div class="editor-status-title">Статус</div>
@@ -149,6 +159,9 @@ function ensureEditor() {
   const panel = backdrop.querySelector('.editor-panel');
   const dateEl = backdrop.querySelector('[data-date]');
   const nameInput = backdrop.querySelector('#editorName');
+  const photoInput = backdrop.querySelector('#editorPhoto');
+  const removePhotoBtn = backdrop.querySelector('.editor-remove-photo');
+  const photoPreview = backdrop.querySelector('[data-photo-preview]');
   const timeInput = backdrop.querySelector('#editorTime');
   const saveBtn = backdrop.querySelector('.editor-save');
   const statusButtons = Array.from(backdrop.querySelectorAll('.editor-status'));
@@ -158,10 +171,14 @@ function ensureEditor() {
     panel,
     dateEl,
     nameInput,
+    photoInput,
+    removePhotoBtn,
+    photoPreview,
     timeInput,
     saveBtn,
     statusButtons,
-    selectedStatus: ''
+    selectedStatus: '',
+    selectedPhoto: ''
   };
 
   backdrop.addEventListener('click', (event) => {
@@ -181,6 +198,20 @@ function ensureEditor() {
     });
   });
 
+  photoInput.addEventListener('change', async () => {
+    const file = photoInput.files && photoInput.files[0];
+    if (!file) return;
+    const photoDataUrl = await readFileAsDataUrl(file);
+    editor.selectedPhoto = photoDataUrl;
+    renderEditorPhotoPreview();
+    photoInput.value = '';
+  });
+
+  removePhotoBtn.addEventListener('click', () => {
+    editor.selectedPhoto = '';
+    renderEditorPhotoPreview();
+  });
+
   saveBtn.addEventListener('click', () => {
     if (!currentEditId) return;
 
@@ -189,6 +220,7 @@ function ensureEditor() {
 
     upsertShift(currentEditId, {
       name: editor.nameInput.value.trim(),
+      photo: editor.selectedPhoto || null,
       time: editor.timeInput.value,
       status: nextStatus,
       statusAt: nextStatus ? (prev.status === nextStatus ? prev.statusAt || new Date().toISOString() : new Date().toISOString()) : null
@@ -212,9 +244,12 @@ function openEditor({ id, dateLabel }) {
   currentEditId = id;
   editor.dateEl.textContent = dateLabel;
   editor.nameInput.value = shift.name || '';
+  editor.selectedPhoto = shift.photo || '';
+  editor.photoInput.value = '';
   editor.timeInput.value = shift.time || '';
   editor.selectedStatus = shift.status || '';
   renderStatusSelection();
+  renderEditorPhotoPreview();
 
   editor.backdrop.classList.add('open');
   editor.nameInput.focus();
@@ -230,5 +265,42 @@ function renderStatusSelection() {
   editor.statusButtons.forEach((btn) => {
     const isActive = (btn.dataset.status || '') === editor.selectedStatus;
     btn.classList.toggle('active', isActive);
+  });
+}
+
+function renderEditorPhotoPreview() {
+  if (!editor.selectedPhoto) {
+    editor.photoPreview.innerHTML = '<span class="editor-photo-empty">Фото не выбрано</span>';
+    return;
+  }
+
+  editor.photoPreview.innerHTML = `<img src="${editor.selectedPhoto}" alt="Фото сменщика" />`;
+}
+
+function renderAvatar(el, photo, name) {
+  el.classList.remove('has-photo');
+
+  if (photo) {
+    el.classList.add('has-photo');
+    el.style.backgroundImage = `url("${photo}")`;
+    el.textContent = '';
+    return;
+  }
+
+  el.style.backgroundImage = '';
+  el.textContent = getInitials(name);
+}
+
+function getInitials(name) {
+  if (!name || name === 'Не назначен') return '+';
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((p) => p[0].toUpperCase()).join('');
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
   });
 }

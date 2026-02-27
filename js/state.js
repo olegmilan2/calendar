@@ -54,7 +54,7 @@ function saveCache() {
 }
 
 function emptyShift() {
-  return { name: '', time: '', status: '', statusAt: null };
+  return { name: '', note: '', photo: null, time: '', status: '', statusAt: null };
 }
 
 function isSameShifts(a, b) {
@@ -69,6 +69,8 @@ function isSameShifts(a, b) {
     const aShift = a[aKeys[i]] || emptyShift();
     const bShift = b[bKeys[i]] || emptyShift();
     if (aShift.name !== bShift.name) return false;
+    if ((aShift.note || '') !== (bShift.note || '')) return false;
+    if ((aShift.photo || null) !== (bShift.photo || null)) return false;
     if (aShift.time !== bShift.time) return false;
     if (aShift.status !== bShift.status) return false;
     if ((aShift.statusAt || null) !== (bShift.statusAt || null)) return false;

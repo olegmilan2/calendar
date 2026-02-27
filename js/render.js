@@ -5,6 +5,7 @@ import { updateTimer, updateTimers } from './timer.js';
 
 let editor = null;
 let currentEditId = null;
+let quickCrop = null;
 
 export function renderWeekdays(weekdaysEl) {
   weekdaysEl.innerHTML = '';
@@ -33,6 +34,7 @@ export function renderTabs(tabsEl, onMonthChange) {
 
 export function renderMonth(monthTitleEl, gridEl) {
   ensureEditor();
+  ensureQuickCrop();
 
   const year = new Date().getFullYear();
   const month = MONTHS[state.monthIndex];
@@ -67,13 +69,15 @@ function createDayCard(year, month, day) {
 
   card.innerHTML = `
     <div class="day-main">
-      <span class="day-avatar" data-avatar></span>
+      <span class="day-avatar" data-avatar role="button" tabindex="0" title="Добавить фото"></span>
+      <input type="file" class="quick-photo-input" accept="image/*" hidden />
       <div class="day-meta">
         <div class="day-top">
           <span class="day-number">${day}</span>
           <span class="day-badge" data-badge></span>
         </div>
         <div class="day-name" data-name></div>
+        <div class="day-note" data-note></div>
         <div class="day-time" data-time></div>
       </div>
     </div>
@@ -81,6 +85,33 @@ function createDayCard(year, month, day) {
   `;
 
   updateDayCard(card, shift);
+
+  const avatarEl = card.querySelector('[data-avatar]');
+  const quickPhotoInput = card.querySelector('.quick-photo-input');
+
+  avatarEl.addEventListener('click', (event) => {
+    event.stopPropagation();
+    quickPhotoInput.click();
+  });
+
+  avatarEl.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    event.stopPropagation();
+    quickPhotoInput.click();
+  });
+
+  quickPhotoInput.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+
+  quickPhotoInput.addEventListener('change', async () => {
+    const file = quickPhotoInput.files && quickPhotoInput.files[0];
+    if (!file) return;
+    const photoDataUrl = await readFileAsDataUrl(file);
+    await openQuickCrop(id, photoDataUrl);
+    quickPhotoInput.value = '';
+  });
 
   card.addEventListener('click', () => {
     openEditor({
@@ -94,17 +125,26 @@ function createDayCard(year, month, day) {
 
 function updateDayCard(card, shift) {
   const nameEl = card.querySelector('[data-name]');
+  const noteEl = card.querySelector('[data-note]');
   const timeEl = card.querySelector('[data-time]');
   const badgeEl = card.querySelector('[data-badge]');
   const avatarEl = card.querySelector('[data-avatar]');
   const name = shift.name || 'Не назначен';
+  const note = shift.note || '';
 
   nameEl.textContent = name;
+  noteEl.textContent = note || 'Без заметки';
+  noteEl.classList.toggle('empty', !note);
   timeEl.textContent = shift.time ? `Приход: ${shift.time}` : 'Время не задано';
   renderAvatar(avatarEl, shift.photo, name);
 
   badgeEl.className = 'day-badge';
   badgeEl.textContent = '';
+
+  if (!shift.status && (shift.name || shift.time || shift.note || shift.photo)) {
+    badgeEl.textContent = 'В пути';
+    badgeEl.classList.add('route');
+  }
 
   if (shift.status === 'ok') {
     badgeEl.textContent = 'Пришел';
@@ -140,25 +180,24 @@ function ensureEditor() {
       <div class="editor-date" data-date></div>
       <label class="editor-label" for="editorName">Имя сменщика</label>
       <input id="editorName" class="editor-input" type="text" placeholder="Введите имя" />
-      <label class="editor-label" for="editorPhoto">Фото сменщика</label>
-      <div class="editor-photo-row">
-        <input id="editorPhoto" class="editor-input editor-file" type="file" accept="image/*" />
-        <button type="button" class="editor-remove-photo">Убрать фото</button>
-      </div>
-      <div class="editor-crop-controls" data-crop-controls hidden>
-        <label class="editor-label" for="cropZoom">Масштаб</label>
-        <input id="cropZoom" class="editor-range" type="range" min="100" max="300" value="100" />
-        <label class="editor-label" for="cropX">Сдвиг X</label>
-        <input id="cropX" class="editor-range" type="range" min="0" max="100" value="50" />
-        <label class="editor-label" for="cropY">Сдвиг Y</label>
-        <input id="cropY" class="editor-range" type="range" min="0" max="100" value="50" />
-      </div>
-      <div class="editor-photo-preview" data-photo-preview></div>
+      <label class="editor-label" for="editorNote">Заметка</label>
+      <input id="editorNote" class="editor-input" type="text" placeholder="Например: ключи у охраны" />
       <label class="editor-label" for="editorTime">Время прихода</label>
-      <input id="editorTime" class="editor-input" type="time" />
+      <div class="editor-time">
+        <button type="button" class="editor-time-step" data-step="-15">-15м</button>
+        <input id="editorTime" class="editor-input editor-time-input" type="time" />
+        <button type="button" class="editor-time-step" data-step="15">+15м</button>
+      </div>
+      <div class="editor-time-presets">
+        <button type="button" class="editor-time-preset" data-time="08:00">08:00</button>
+        <button type="button" class="editor-time-preset" data-time="09:00">09:00</button>
+        <button type="button" class="editor-time-preset" data-time="10:00">10:00</button>
+        <button type="button" class="editor-time-preset" data-time="12:00">12:00</button>
+        <button type="button" class="editor-time-preset" data-time="18:00">18:00</button>
+      </div>
       <div class="editor-status-title">Статус</div>
       <div class="editor-status-row">
-        <button type="button" class="editor-status" data-status="">Без статуса</button>
+        <button type="button" class="editor-status" data-status="">В пути</button>
         <button type="button" class="editor-status" data-status="ok">Пришел</button>
         <button type="button" class="editor-status" data-status="late">Опоздал</button>
       </div>
@@ -172,16 +211,13 @@ function ensureEditor() {
   document.body.appendChild(backdrop);
 
   const panel = backdrop.querySelector('.editor-panel');
+  const closeBtn = backdrop.querySelector('.editor-close');
   const dateEl = backdrop.querySelector('[data-date]');
   const nameInput = backdrop.querySelector('#editorName');
-  const photoInput = backdrop.querySelector('#editorPhoto');
-  const removePhotoBtn = backdrop.querySelector('.editor-remove-photo');
-  const cropControls = backdrop.querySelector('[data-crop-controls]');
-  const cropZoom = backdrop.querySelector('#cropZoom');
-  const cropX = backdrop.querySelector('#cropX');
-  const cropY = backdrop.querySelector('#cropY');
-  const photoPreview = backdrop.querySelector('[data-photo-preview]');
+  const noteInput = backdrop.querySelector('#editorNote');
   const timeInput = backdrop.querySelector('#editorTime');
+  const timeStepButtons = Array.from(backdrop.querySelectorAll('.editor-time-step'));
+  const timePresetButtons = Array.from(backdrop.querySelectorAll('.editor-time-preset'));
   const saveBtn = backdrop.querySelector('.editor-save');
   const clearShiftBtn = backdrop.querySelector('.editor-clear-shift');
   const statusButtons = Array.from(backdrop.querySelectorAll('.editor-status'));
@@ -191,26 +227,24 @@ function ensureEditor() {
     panel,
     dateEl,
     nameInput,
-    photoInput,
-    removePhotoBtn,
-    cropControls,
-    cropZoom,
-    cropX,
-    cropY,
-    photoPreview,
+    noteInput,
     timeInput,
+    timeStepButtons,
+    timePresetButtons,
     saveBtn,
     clearShiftBtn,
     statusButtons,
-    selectedStatus: '',
-    selectedPhoto: '',
-    cropImage: null
+    selectedStatus: ''
   };
 
   backdrop.addEventListener('click', (event) => {
     if (event.target === backdrop || event.target.hasAttribute('data-close')) {
       closeEditor();
     }
+  });
+
+  closeBtn.addEventListener('click', () => {
+    closeEditor();
   });
 
   panel.addEventListener('click', (event) => {
@@ -224,26 +258,16 @@ function ensureEditor() {
     });
   });
 
-  photoInput.addEventListener('change', async () => {
-    const file = photoInput.files && photoInput.files[0];
-    if (!file) return;
-    const photoDataUrl = await readFileAsDataUrl(file);
-    await setCropSource(photoDataUrl);
-    renderEditorPhotoPreview();
-    photoInput.value = '';
+  timeStepButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const step = Number(btn.dataset.step || 0);
+      editor.timeInput.value = shiftTimeByMinutes(editor.timeInput.value, step);
+    });
   });
 
-  removePhotoBtn.addEventListener('click', () => {
-    editor.selectedPhoto = '';
-    editor.cropImage = null;
-    editor.cropControls.hidden = true;
-    renderEditorPhotoPreview();
-  });
-
-  [cropZoom, cropX, cropY].forEach((control) => {
-    control.addEventListener('input', () => {
-      if (!editor.cropImage) return;
-      renderEditorPhotoPreview();
+  timePresetButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      editor.timeInput.value = btn.dataset.time || '';
     });
   });
 
@@ -255,7 +279,8 @@ function ensureEditor() {
 
     upsertShift(currentEditId, {
       name: editor.nameInput.value.trim(),
-      photo: editor.selectedPhoto || null,
+      note: editor.noteInput.value.trim(),
+      photo: prev.photo || null,
       time: editor.timeInput.value,
       status: nextStatus,
       statusAt: nextStatus ? (prev.status === nextStatus ? prev.statusAt || new Date().toISOString() : new Date().toISOString()) : null
@@ -270,6 +295,7 @@ function ensureEditor() {
 
     upsertShift(currentEditId, {
       name: '',
+      note: '',
       photo: null,
       time: '',
       status: '',
@@ -294,17 +320,10 @@ function openEditor({ id, dateLabel }) {
   currentEditId = id;
   editor.dateEl.textContent = dateLabel;
   editor.nameInput.value = shift.name || '';
-  editor.selectedPhoto = shift.photo || '';
-  editor.cropImage = null;
-  editor.cropControls.hidden = true;
-  editor.photoInput.value = '';
-  editor.cropZoom.value = '100';
-  editor.cropX.value = '50';
-  editor.cropY.value = '50';
+  editor.noteInput.value = shift.note || '';
   editor.timeInput.value = shift.time || '';
   editor.selectedStatus = shift.status || '';
   renderStatusSelection();
-  renderEditorPhotoPreview();
 
   editor.backdrop.classList.add('open');
   editor.nameInput.focus();
@@ -321,26 +340,6 @@ function renderStatusSelection() {
     const isActive = (btn.dataset.status || '') === editor.selectedStatus;
     btn.classList.toggle('active', isActive);
   });
-}
-
-function renderEditorPhotoPreview() {
-  if (editor.cropImage) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 220;
-    canvas.height = 220;
-    drawCropToCanvas(canvas, editor.cropImage);
-    editor.selectedPhoto = canvas.toDataURL('image/jpeg', 0.9);
-    editor.photoPreview.innerHTML = '';
-    editor.photoPreview.appendChild(canvas);
-    return;
-  }
-
-  if (!editor.selectedPhoto) {
-    editor.photoPreview.innerHTML = '<span class="editor-photo-empty">Фото не выбрано</span>';
-    return;
-  }
-
-  editor.photoPreview.innerHTML = `<img src="${editor.selectedPhoto}" alt="Фото сменщика" />`;
 }
 
 function renderAvatar(el, photo, name) {
@@ -371,22 +370,137 @@ function readFileAsDataUrl(file) {
   });
 }
 
-async function setCropSource(dataUrl) {
-  const image = await loadImage(dataUrl);
-  editor.cropImage = image;
-  editor.cropControls.hidden = false;
-  editor.cropZoom.value = '100';
-  editor.cropX.value = '50';
-  editor.cropY.value = '50';
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
 }
 
-function drawCropToCanvas(canvas, image) {
+function shiftTimeByMinutes(timeValue, deltaMinutes) {
+  const base = /^([01]\d|2[0-3]):([0-5]\d)$/.test(timeValue) ? timeValue : '09:00';
+  const [h, m] = base.split(':').map(Number);
+  let total = h * 60 + m + deltaMinutes;
+  while (total < 0) total += 1440;
+  while (total >= 1440) total -= 1440;
+  const nextH = String(Math.floor(total / 60)).padStart(2, '0');
+  const nextM = String(total % 60).padStart(2, '0');
+  return `${nextH}:${nextM}`;
+}
+
+function ensureQuickCrop() {
+  if (quickCrop) return;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'quick-crop-backdrop';
+  backdrop.innerHTML = `
+    <div class="quick-crop-panel" role="dialog" aria-modal="true" aria-label="Выбор области фото">
+      <div class="quick-crop-title">Выберите область фото</div>
+      <div class="quick-crop-preview" data-quick-preview></div>
+      <label class="editor-label" for="quickCropZoom">Масштаб</label>
+      <input id="quickCropZoom" class="editor-range" type="range" min="100" max="300" value="100" />
+      <label class="editor-label" for="quickCropX">Сдвиг X</label>
+      <input id="quickCropX" class="editor-range" type="range" min="0" max="100" value="50" />
+      <label class="editor-label" for="quickCropY">Сдвиг Y</label>
+      <input id="quickCropY" class="editor-range" type="range" min="0" max="100" value="50" />
+      <div class="quick-crop-actions">
+        <button type="button" class="quick-crop-cancel">Отмена</button>
+        <button type="button" class="quick-crop-apply">Применить</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  const panel = backdrop.querySelector('.quick-crop-panel');
+  const preview = backdrop.querySelector('[data-quick-preview]');
+  const zoom = backdrop.querySelector('#quickCropZoom');
+  const x = backdrop.querySelector('#quickCropX');
+  const y = backdrop.querySelector('#quickCropY');
+  const cancelBtn = backdrop.querySelector('.quick-crop-cancel');
+  const applyBtn = backdrop.querySelector('.quick-crop-apply');
+
+  quickCrop = {
+    backdrop,
+    panel,
+    preview,
+    zoom,
+    x,
+    y,
+    cancelBtn,
+    applyBtn,
+    image: null,
+    dayId: null,
+    resultPhoto: null
+  };
+
+  backdrop.addEventListener('click', (event) => {
+    if (event.target === backdrop) closeQuickCrop();
+  });
+  panel.addEventListener('click', (event) => event.stopPropagation());
+  cancelBtn.addEventListener('click', () => closeQuickCrop());
+
+  [zoom, x, y].forEach((control) => {
+    control.addEventListener('input', () => {
+      renderQuickCropPreview();
+    });
+  });
+
+  applyBtn.addEventListener('click', () => {
+    if (!quickCrop.dayId || !quickCrop.resultPhoto) {
+      closeQuickCrop();
+      return;
+    }
+    upsertShift(quickCrop.dayId, { photo: quickCrop.resultPhoto });
+    updateDayCardById(quickCrop.dayId);
+    closeQuickCrop();
+  });
+}
+
+async function openQuickCrop(dayId, dataUrl) {
+  ensureQuickCrop();
+  quickCrop.dayId = dayId;
+  quickCrop.image = await loadImage(dataUrl);
+  quickCrop.zoom.value = '100';
+  quickCrop.x.value = '50';
+  quickCrop.y.value = '50';
+  renderQuickCropPreview();
+  quickCrop.backdrop.classList.add('open');
+}
+
+function closeQuickCrop() {
+  if (!quickCrop) return;
+  quickCrop.backdrop.classList.remove('open');
+  quickCrop.dayId = null;
+  quickCrop.image = null;
+  quickCrop.resultPhoto = null;
+  quickCrop.preview.innerHTML = '';
+}
+
+function renderQuickCropPreview() {
+  if (!quickCrop || !quickCrop.image) return;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 220;
+  canvas.height = 220;
+
+  drawCropWithParams(
+    canvas,
+    quickCrop.image,
+    Number(quickCrop.zoom.value) / 100,
+    Number(quickCrop.x.value) / 100,
+    Number(quickCrop.y.value) / 100
+  );
+
+  quickCrop.resultPhoto = canvas.toDataURL('image/jpeg', 0.9);
+  quickCrop.preview.innerHTML = '';
+  quickCrop.preview.appendChild(canvas);
+}
+
+function drawCropWithParams(canvas, image, zoom, xRatio, yRatio) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-
-  const zoom = Number(editor.cropZoom.value) / 100;
-  const xRatio = Number(editor.cropX.value) / 100;
-  const yRatio = Number(editor.cropY.value) / 100;
 
   const srcW = image.naturalWidth / zoom;
   const srcH = image.naturalHeight / zoom;
@@ -398,13 +512,4 @@ function drawCropToCanvas(canvas, image) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(image, srcX, srcY, side, side, 0, 0, canvas.width, canvas.height);
-}
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = reject;
-    image.src = src;
-  });
 }

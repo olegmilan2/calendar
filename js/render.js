@@ -3,6 +3,10 @@ import { state, upsertShift } from './state.js';
 import { makeId } from './utils.js';
 import { updateTimer, updateTimers } from './timer.js';
 
+const WORKERS = [
+  { id: 'oleg', name: 'Олег', photo: '/assets/workers/oleg.png' }
+];
+
 let editor = null;
 let currentEditId = null;
 
@@ -66,13 +70,17 @@ function createDayCard(year, month, day) {
   card.dataset.id = id;
 
   card.innerHTML = `
-    <div class="day-top">
-      <span class="day-number">${day}</span>
+    <div class="day-main">
       <span class="day-avatar" data-avatar></span>
-      <span class="day-badge" data-badge></span>
+      <div class="day-meta">
+        <div class="day-top">
+          <span class="day-number">${day}</span>
+          <span class="day-badge" data-badge></span>
+        </div>
+        <div class="day-name" data-name></div>
+        <div class="day-time" data-time></div>
+      </div>
     </div>
-    <div class="day-name" data-name></div>
-    <div class="day-time" data-time></div>
     <div class="timer compact" data-timer></div>
   `;
 
@@ -134,13 +142,8 @@ function ensureEditor() {
         <button type="button" class="editor-close" data-close>Закрыть</button>
       </div>
       <div class="editor-date" data-date></div>
-      <label class="editor-label" for="editorName">Имя сменщика</label>
-      <input id="editorName" class="editor-input" type="text" placeholder="Введите имя" />
-      <label class="editor-label" for="editorPhoto">Фото сменщика</label>
-      <div class="editor-photo-row">
-        <input id="editorPhoto" class="editor-input editor-file" type="file" accept="image/*" />
-        <button type="button" class="editor-remove-photo">Убрать фото</button>
-      </div>
+      <label class="editor-label" for="editorWorker">Сменщик</label>
+      <select id="editorWorker" class="editor-input editor-select"></select>
       <div class="editor-photo-preview" data-photo-preview></div>
       <label class="editor-label" for="editorTime">Время прихода</label>
       <input id="editorTime" class="editor-input" type="time" />
@@ -150,7 +153,10 @@ function ensureEditor() {
         <button type="button" class="editor-status" data-status="ok">Пришел</button>
         <button type="button" class="editor-status" data-status="late">Опоздал</button>
       </div>
-      <button type="button" class="editor-save">Сохранить</button>
+      <div class="editor-actions">
+        <button type="button" class="editor-clear-shift">Очистить смену</button>
+        <button type="button" class="editor-save">Сохранить</button>
+      </div>
     </div>
   `;
 
@@ -158,28 +164,28 @@ function ensureEditor() {
 
   const panel = backdrop.querySelector('.editor-panel');
   const dateEl = backdrop.querySelector('[data-date]');
-  const nameInput = backdrop.querySelector('#editorName');
-  const photoInput = backdrop.querySelector('#editorPhoto');
-  const removePhotoBtn = backdrop.querySelector('.editor-remove-photo');
+  const workerSelect = backdrop.querySelector('#editorWorker');
   const photoPreview = backdrop.querySelector('[data-photo-preview]');
   const timeInput = backdrop.querySelector('#editorTime');
   const saveBtn = backdrop.querySelector('.editor-save');
+  const clearShiftBtn = backdrop.querySelector('.editor-clear-shift');
   const statusButtons = Array.from(backdrop.querySelectorAll('.editor-status'));
 
   editor = {
     backdrop,
     panel,
     dateEl,
-    nameInput,
-    photoInput,
-    removePhotoBtn,
+    workerSelect,
     photoPreview,
     timeInput,
     saveBtn,
+    clearShiftBtn,
     statusButtons,
     selectedStatus: '',
     selectedPhoto: ''
   };
+
+  renderWorkerOptions(workerSelect);
 
   backdrop.addEventListener('click', (event) => {
     if (event.target === backdrop || event.target.hasAttribute('data-close')) {
@@ -198,17 +204,9 @@ function ensureEditor() {
     });
   });
 
-  photoInput.addEventListener('change', async () => {
-    const file = photoInput.files && photoInput.files[0];
-    if (!file) return;
-    const photoDataUrl = await readFileAsDataUrl(file);
-    editor.selectedPhoto = photoDataUrl;
-    renderEditorPhotoPreview();
-    photoInput.value = '';
-  });
-
-  removePhotoBtn.addEventListener('click', () => {
-    editor.selectedPhoto = '';
+  workerSelect.addEventListener('change', () => {
+    const worker = getWorkerById(workerSelect.value);
+    editor.selectedPhoto = worker ? worker.photo : '';
     renderEditorPhotoPreview();
   });
 
@@ -217,13 +215,29 @@ function ensureEditor() {
 
     const prev = state.shifts[currentEditId] || {};
     const nextStatus = editor.selectedStatus;
+    const worker = getWorkerById(editor.workerSelect.value);
 
     upsertShift(currentEditId, {
-      name: editor.nameInput.value.trim(),
+      name: worker ? worker.name : '',
       photo: editor.selectedPhoto || null,
       time: editor.timeInput.value,
       status: nextStatus,
       statusAt: nextStatus ? (prev.status === nextStatus ? prev.statusAt || new Date().toISOString() : new Date().toISOString()) : null
+    });
+
+    updateDayCardById(currentEditId);
+    closeEditor();
+  });
+
+  clearShiftBtn.addEventListener('click', () => {
+    if (!currentEditId) return;
+
+    upsertShift(currentEditId, {
+      name: '',
+      photo: null,
+      time: '',
+      status: '',
+      statusAt: null
     });
 
     updateDayCardById(currentEditId);
@@ -243,16 +257,16 @@ function openEditor({ id, dateLabel }) {
   const shift = state.shifts[id] || {};
   currentEditId = id;
   editor.dateEl.textContent = dateLabel;
-  editor.nameInput.value = shift.name || '';
-  editor.selectedPhoto = shift.photo || '';
-  editor.photoInput.value = '';
+  const worker = getWorkerByName(shift.name || '');
+  editor.workerSelect.value = worker ? worker.id : '';
+  editor.selectedPhoto = worker ? worker.photo : '';
   editor.timeInput.value = shift.time || '';
   editor.selectedStatus = shift.status || '';
   renderStatusSelection();
   renderEditorPhotoPreview();
 
   editor.backdrop.classList.add('open');
-  editor.nameInput.focus();
+  editor.workerSelect.focus();
 }
 
 function closeEditor() {
@@ -297,10 +311,20 @@ function getInitials(name) {
   return parts.map((p) => p[0].toUpperCase()).join('');
 }
 
-function readFileAsDataUrl(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.readAsDataURL(file);
+function renderWorkerOptions(selectEl) {
+  selectEl.innerHTML = '<option value="">Не выбран</option>';
+  WORKERS.forEach((worker) => {
+    const option = document.createElement('option');
+    option.value = worker.id;
+    option.textContent = worker.name;
+    selectEl.appendChild(option);
   });
+}
+
+function getWorkerById(id) {
+  return WORKERS.find((worker) => worker.id === id) || null;
+}
+
+function getWorkerByName(name) {
+  return WORKERS.find((worker) => worker.name === name) || null;
 }
